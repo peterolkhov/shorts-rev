@@ -1,0 +1,38 @@
+{
+  "name": "shorts-rev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated faceless AI-narration YouTube Shorts pipeline",
+  "scripts": {
+    "make": "tsx src/cli.ts make",
+    "batch": "tsx src/cli.ts batch",
+    "upload": "tsx src/cli.ts upload",
+    "auth": "tsx src/cli.ts auth",
+    "run": "tsx src/cli.ts run",
+    "tiktok-auth": "tsx src/cli.ts tiktok-auth",
+    "crosspost": "tsx src/cli.ts crosspost",
+    "cycle": "tsx src/cli.ts cycle",
+    "platforms": "tsx src/cli.ts platforms",
+    "tick": "tsx src/cli.ts tick",
+    "loop": "tsx src/cli.ts loop",
+    "sync": "tsx src/cli.ts sync",
+    "coach": "tsx src/cli.ts coach",
+    "spy": "tsx src/cli.ts spy",
+    "stats": "tsx src/cli.ts stats",
+    "doctor": "tsx src/cli.ts doctor"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.85",
+    "@napi-rs/canvas": "^0.1.100",
+    "ai": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

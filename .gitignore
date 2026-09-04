@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Local env / OAuth tokens (never commit)
+.env
+.env.local
+.env.*.local
+youtube-token.json
+tiktok-token.json
+
+# Build and runtime output
+out/
+work/
+*.log
+
+# Optional user media directories (drop your own licensed files here)
+/gameplay/*.mp4
+/gameplay/*.mov
+/gameplay/*.webm
+/gameplay/*.mkv
+/music/*.mp3
+/music/*.m4a
+/music/*.wav
+/assets/*.jpg
+/assets/*.jpeg
+/assets/*.png
+/assets/*.gif
+/assets/*.mp4
+/assets/*.mov
+!/assets/README.md
+
+# Self-generated state / data files (re-created at runtime)
+ledger.json
+playbook.json
+monetization-snapshots.json
+comment-replies.json
+repost-queue.json
+viral-hooks.json
+
+# macOS / editor / local notes
+.DS_Store
+.claude/
+BOOTSTRAP.md
+/_*.ts
+/src/_*.ts
+*.local.ts
+
+# Scheduling / local launchd files (contain hardcoded machine paths)
+scheduler/*.plist
+scheduler/*.sh
+run-*.sh
+
+# Disabled / example CI files
+.github/workflows/*.disabled
