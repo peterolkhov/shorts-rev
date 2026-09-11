@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
+import { printDemoReadiness } from "./demo.js";
 import { FORMATS, availableFormats } from "./formats.js";
 import { loadPlaybook } from "./playbook.js";
 import { estimateCost } from "./preflight.js";
@@ -68,8 +69,16 @@ export async function doctor(): Promise<void> {
   }
 
   // ── report ──
-  console.log("\nCredential check:");
+  printDemoReadiness("Demo readiness (first video, no YouTube OAuth)");
+
+  console.log("Full run (upload + analytics + coach):");
   for (const c of checks) console.log(`  ${c.ok ? "✅" : "❌"} ${c.name.padEnd(22)} ${c.detail}`);
+  const yt = checks.find((c) => c.name === "YouTube auth");
+  if (yt && !yt.ok) {
+    console.log(
+      "  → YouTube is only needed for `npm run auth` / `npm run run`. Skip it for `npm run make -- --demo`.",
+    );
+  }
 
   const pb = await loadPlaybook();
   const runnable = availableFormats(pb.enabledFormats).map((f) => f.id);
@@ -80,7 +89,7 @@ export async function doctor(): Promise<void> {
     const mark = !enabled ? "⚪ off" : ready ? "🟢 ready" : "🔴 needs key";
     console.log(`  ${mark.padEnd(14)} ${f.id.padEnd(20)} ~$${estimateCost(f).toFixed(2)}   (${f.requires.join(", ") || "free visuals"})`);
   }
-  console.log("");
+  console.log("\nNext: npm run make -- --demo   (local Short, no OAuth)\n");
 }
 
 async function probe(

@@ -26,7 +26,11 @@ function flag(name: string): string | undefined {
   return f ? f.slice(name.length + 3) : undefined;
 }
 
-const makeOpts = { track: flag("track"), format: flag("format") };
+const makeOpts = {
+  track: flag("track"),
+  format: flag("format"),
+  demo: rest.includes("--demo"),
+};
 
 async function stats() {
   const ledger = await loadLedger();
@@ -192,6 +196,7 @@ async function main() {
 Niche: "${config.niche}"
 
   Build & post
+    npm run make -- --demo  first Short -> out/demo.mp4 (no YouTube OAuth)
     npm run make            build ONE short -> out/ (no upload)
     npm run make "angle"    steer the topic
     npm run batch -- --n=5  build 5 to review
@@ -209,9 +214,10 @@ Niche: "${config.niche}"
     npx tsx src/cli.ts loop   sync -> coach -> post (the daily cron target)
     npx tsx src/cli.ts cycle  produce + cross-post one video per lane
     npx tsx src/cli.ts stats  show playbook + recent video performance
+    npm run doctor           demo vs full-run keys + cost per format
 
-Flow: run 'cycle' daily. It learns what retains + earns and tunes itself,
-then posts to every platform in PLATFORMS. See SETUP-CROSSPOST.md.`);
+Flow: start with 'npm run make -- --demo'. Then 'cycle' daily once YouTube
+is authorized. See SETUP-CROSSPOST.md.`)
   }
 }
 

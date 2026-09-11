@@ -23,7 +23,8 @@ export function assertReady(format: Format): void {
   if (missing.length) {
     throw new Error(
       `Not ready to spend on "${format.id}". Missing: ${missing.join(", ")}. ` +
-        `Fill them in .env (run \`npx tsx src/cli.ts doctor\` to check everything).`,
+        `Fill them in .env (run \`npm run doctor\` to see demo vs full-run keys). ` +
+        `First video without YouTube OAuth: \`npm run make -- --demo\`.`,
     );
   }
 }
