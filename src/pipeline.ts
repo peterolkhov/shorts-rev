@@ -9,6 +9,15 @@ import { getFormat } from "./formats.js";
 import { FOOTAGE_FILTERS } from "./styles.js";
 import { getTrack } from "./tracks.js";
 import { assertReady, estimateCost } from "./preflight.js";
+import {
+  DEMO_OUT_NAME,
+  DEMO_SCRIPT,
+  assertDemoReady,
+  hasLlmKey,
+  printDemoReadiness,
+  stubTts,
+  stubVisuals,
+} from "./demo.js";
 import { fetchVisualsByProvider } from "./providers.js";
 import { imageToClip } from "./lib/motion.js";
 import { ideate, type Script } from "./steps/ideate.js";
@@ -39,10 +48,19 @@ export interface MakeOpts {
   caption?: Partial<CaptionStyle>; // override caption look (for style samples)
   visualStyle?: string; // override the AI-image art direction (rotate the look)
   mascot?: boolean; // splice a Matteo (Italian-brainrot mascot) cameo into the b-roll
+  /** Local first-video path: Pexels stock, no YouTube OAuth, writes `out/demo.mp4`. */
+  demo?: boolean;
 }
 
 /** Generate one finished .mp4 using playbook-drawn params, logged to the ledger. */
 export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVideo> {
+  // Demo is the same pipeline, cheapest visual path, no upload. Force stock
+  // narration so a cold `npm run make -- --demo` does not pick a paid AI format.
+  if (opts.demo) {
+    opts.format = "finance-narration";
+    opts.track = opts.track ?? "finance";
+  }
+
   const pb = await loadPlaybook();
   const { params, exploring, dimension } = draw(pb);
   if (opts.track) params.track = opts.track;
@@ -52,10 +70,17 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
     params.caption = { ...pb.caption, ...f.caption };
     params.visual.segmentSeconds = f.clipSeconds;
   }
+  if (opts.demo) params.targetLengthSec = Math.min(params.targetLengthSec, 20);
   if (opts.caption) params.caption = { ...params.caption, ...opts.caption }; // style sample
   const format = getFormat(params.format);
   const track = getTrack(params.track);
-  assertReady(format); // fail before any paid call if a key is missing
+  if (opts.demo) {
+    printDemoReadiness();
+    assertDemoReady();
+    log("pipeline", "demo mode — stock visuals, no YouTube upload");
+  } else {
+    assertReady(format); // fail before any paid call if a key is missing
+  }
   log(
     "pipeline",
     `${track.label} × ${format.label} | ~$${estimateCost(format).toFixed(2)}/video${
@@ -70,6 +95,12 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
   if (opts.script) {
     script = opts.script;
     ideatePrompt = opts.ideatePrompt ?? "(pre-made script supplied to make())";
+  } else if (opts.demo && !hasLlmKey()) {
+    script = seed
+      ? { ...DEMO_SCRIPT, topic: seed, title: seed.slice(0, 70) }
+      : DEMO_SCRIPT;
+    ideatePrompt = "(canned demo script — set ANTHROPIC_API_KEY for a fresh one)";
+    log("demo", "no LLM key — using canned demo script");
   } else {
     const ledger = await loadLedger();
     const recentTopics = ledger
@@ -129,26 +160,28 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
     "Follow so the next one finds you.",
   ];
   const followCta =
-    process.env.FOLLOW_CTA === "0"
+    opts.demo || process.env.FOLLOW_CTA === "0"
       ? ""
       : " " + FOLLOW_CTAS[Math.floor(Math.random() * FOLLOW_CTAS.length)];
 
+  const spoken = `${script.hook} ${script.narration}${followCta}`;
   const audioPath = path.join(dir, "voice.mp3");
-  const { words } = await tts(
-    `${script.hook} ${script.narration}${followCta}`,
-    audioPath,
-    params.voice,
-    opts.voiceId,
-  );
+  const { words } =
+    opts.demo && !config.elevenlabs.apiKey
+      ? await stubTts(spoken, audioPath)
+      : await tts(spoken, audioPath, params.voice, opts.voiceId);
 
   const captions = await renderCaptions(words, dir, params.caption);
-  const broll = await fetchVisualsByProvider(format.provider, {
-    queries: script.brollQueries,
-    topic: script.topic,
-    promptStyle: opts.visualStyle ?? format.visualPromptStyle,
-    clipSeconds: params.visual.segmentSeconds,
-    dir,
-  });
+  const broll =
+    opts.demo && format.provider === "stock" && !config.pexels.apiKey
+      ? await stubVisuals(script.brollQueries, dir, params.visual.segmentSeconds)
+      : await fetchVisualsByProvider(format.provider, {
+          queries: script.brollQueries,
+          topic: script.topic,
+          promptStyle: opts.visualStyle ?? format.visualPromptStyle,
+          clipSeconds: params.visual.segmentSeconds,
+          dir,
+        });
 
   // Comedic mascot cameo: splice a Matteo (Italian-brainrot) slide into the
   // middle of the b-roll so he randomly appears mid-explainer — committing to the
@@ -170,7 +203,10 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
     : [];
 
   await mkdir(config.outDir, { recursive: true });
-  const videoPath = path.join(config.outDir, `${name}-${Date.now()}.mp4`);
+  const videoPath = path.join(
+    config.outDir,
+    opts.demo ? DEMO_OUT_NAME : `${name}-${Date.now()}.mp4`,
+  );
   const footageFilter = FOOTAGE_FILTERS[format.footageFilter ?? "none"] ?? "";
   await assemble(dir, broll, audioPath, captions, flair, videoPath, params.visual.segmentSeconds, footageFilter);
 
@@ -186,6 +222,17 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
   });
 
   log("done", videoPath);
+  if (opts.demo) {
+    log(
+      "demo",
+      [
+        hasLlmKey() ? "fresh script" : "canned script",
+        config.elevenlabs.apiKey ? "ElevenLabs voice" : "silent stub audio",
+        config.pexels.apiKey ? "Pexels B-roll" : "title-card clips",
+        "YouTube upload skipped",
+      ].join(" · "),
+    );
+  }
   return { id, videoPath, script, params, dir };
 }
 

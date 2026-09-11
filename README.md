@@ -1,15 +1,58 @@
 # shorts-rev
 
-A self-improving, faceless AI-narration pipeline for YouTube Shorts. One command
-turns a niche into a finished 1080×1920 Short — and it learns from its own
-retention and revenue data to get better every run.
+**One command → a faceless 1080×1920 YouTube Short.** Then a coach loop reads
+retention and revenue and rewrites the playbook so the next one is better.
+
+That loop is the wedge: most AI-shorts tools stop at “render an mp4”. This one
+keeps the exact params that produced each video, pulls analytics, and tunes
+hooks, captions, pacing, format weights, and tracks from what actually held
+viewers.
 
 ```
 ideate → tts → visuals → captions → assemble → upload → analytics → coach → (better) ideate …
 ```
 
-Captions are rendered in-process with `@napi-rs/canvas`, so any ffmpeg build
-works — no `drawtext` or `libass` setup needed.
+Captions are burned in-process with `@napi-rs/canvas`, so any ffmpeg build
+works — no `drawtext` or `libass` setup.
+
+## Demo
+
+![Faceless 1080×1920 YouTube Short produced by one command](docs/demo.gif)
+
+*one command → finished Short*
+
+Drop a looping GIF at `docs/demo.gif` (or an mp4 at `examples/demo.mp4`) once
+you have a public sample. Until then, render your own:
+
+```bash
+npm install
+cp .env.example .env   # fill what's available
+npm run make -- --demo
+# → writes out/demo.mp4 — no YouTube OAuth
+```
+
+## Minimum keys to first video
+
+You do **not** need YouTube OAuth to get a finished Short.
+
+| Goal | Keys |
+|------|------|
+| **First video** (`npm run make -- --demo`) | `ANTHROPIC_API_KEY` + `ELEVENLABS_API_KEY` + `PEXELS_API_KEY` |
+| Full upload + analytics + coach | those three **plus** `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` and `npm run auth` |
+
+`--demo` forces the cheap stock path (Pexels), skips upload, and writes
+`out/demo.mp4`. If a key is missing it degrades instead of hanging on OAuth:
+
+- no Claude → canned demo script
+- no ElevenLabs → silent stub audio (captions still burn)
+- no Pexels → generated title-card clips (no stock binaries shipped)
+
+A voiced stock Short needs ElevenLabs + Pexels. Run `npm run doctor` to see
+**demo readiness** vs **full-run** (YouTube) readiness.
+
+Where to get keys: [Anthropic](https://console.anthropic.com),
+[ElevenLabs](https://elevenlabs.io), [Pexels API](https://www.pexels.com/api/).
+Claude is ~$0.01/script; ElevenLabs is often free-tier; Pexels is free.
 
 ## What it does
 
@@ -25,7 +68,7 @@ works — no `drawtext` or `libass` setup needed.
 - **Cross-posts** the same render to TikTok, Instagram Reels, and Facebook Reels
   when configured.
 
-## Quick start
+## Quick start (full channel)
 
 1. **Install dependencies**
    ```bash
@@ -36,22 +79,25 @@ works — no `drawtext` or `libass` setup needed.
    ```bash
    cp .env.example .env
    ```
-   At minimum you need `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`,
-   `PEXELS_API_KEY`, `YOUTUBE_CLIENT_ID`, and `YOUTUBE_CLIENT_SECRET`.
+   First video: `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `PEXELS_API_KEY`.
+   Upload later: `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET`.
    See `.env.example` for the full list and where to get each key.
 
 3. **Check your setup**
    ```bash
    npm run doctor
    ```
+   Demo keys and YouTube auth are listed separately.
 
 4. **Render one Short locally** (no upload)
    ```bash
-   npm run make
+   npm run make -- --demo
    ```
-   The finished video lands in `out/`.
+   The finished video is `out/demo.mp4`. `npm run make` (no flag) also renders
+   locally but follows the playbook format bandit and will refuse if a chosen
+   format’s keys are missing.
 
-5. **Authorize YouTube once**
+5. **Authorize YouTube once** (only when you want to upload)
    ```bash
    npm run auth
    ```
@@ -67,6 +113,7 @@ works — no `drawtext` or `libass` setup needed.
 ## CLI reference
 
 ```bash
+npm run make -- --demo  # first Short → out/demo.mp4 (no YouTube OAuth)
 npm run make            # render one Short to out/
 npm run make "angle"    # steer the topic
 npm run batch -- --n=5  # render 5 for review
@@ -84,13 +131,14 @@ npm run tick            # one autonomous beat (sync, coach, post, comments)
 
 npm run stats           # show playbook + recent performance
 npm run spy             # refresh viral-hook intelligence
-npm run doctor          # validate all keys and show cost per format
+npm run doctor          # demo vs full-run keys + cost per format
 ```
 
 ## Visual formats
 
 The bandit picks a format per video; the coach learns which retains best.
-A format is only chosen if its required API key is present.
+A format is only chosen if its required API key is present. `--demo` always
+uses `finance-narration` (Pexels stock).
 
 | Format | Visuals | Provider | Needs |
 |----|----|----|----|
@@ -168,6 +216,14 @@ Change `NICHE` in `.env`. The default seed playbook targets personal finance,
 but the format/track system works for any high-retention Shorts niche. Edit
 `src/strategy.ts` and the track definitions in `src/tracks.ts` to match your
 content.
+
+## Sharing / Contributing
+
+Ready-to-paste **Show HN**, Indie Hackers, and social posts:
+[`docs/SHOW_HN.md`](./docs/SHOW_HN.md).
+
+Issues and PRs welcome. Please don’t commit `.env`, OAuth tokens, or `out/`
+renders.
 
 ## License
 
