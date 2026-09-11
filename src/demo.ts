@@ -3,7 +3,6 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { config } from "./config.js";
-import { imageToClip } from "./lib/motion.js";
 import { log, run } from "./lib/util.js";
 import type { Script } from "./steps/ideate.js";
 import type { TtsResult, Word } from "./steps/tts.js";
@@ -210,7 +209,24 @@ export async function stubVisuals(
     const img = path.join(dir, `demo-card-${String(i).padStart(2, "0")}.png`);
     await drawTitleCard(q[i], i, img);
     const clip = path.join(dir, `demo-clip-${String(i).padStart(2, "0")}.mp4`);
-    await imageToClip(img, clip, clipSeconds, i);
+    // Hold the card still — Ken Burns on big type crops the query off-frame.
+    const { width, height, fps } = config.video;
+    await run("ffmpeg", [
+      "-y",
+      "-loop",
+      "1",
+      "-i",
+      img,
+      "-t",
+      String(clipSeconds),
+      "-vf",
+      `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1`,
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      clip,
+    ]);
     paths.push(clip);
   }
   return paths;
