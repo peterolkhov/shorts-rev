@@ -12,6 +12,8 @@ import { assertReady, estimateCost } from "./preflight.js";
 import { fetchVisualsByProvider } from "./providers.js";
 import { imageToClip } from "./lib/motion.js";
 import { ideate, type Script } from "./steps/ideate.js";
+import { claimNewsSeed, formatNewsSeed, refreshNews } from "./steps/news.js";
+import { getActiveInfluencer } from "./influencers.js";
 import { tts } from "./steps/tts.js";
 import { renderCaptions } from "./steps/captions.js";
 import { renderFlair } from "./steps/flair.js";
@@ -56,6 +58,28 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
   const format = getFormat(params.format);
   const track = getTrack(params.track);
   assertReady(format); // fail before any paid call if a key is missing
+
+  let scriptDirective = format.scriptDirective;
+  let voiceId = opts.voiceId;
+  if (format.provider === "ugc") {
+    const host = await getActiveInfluencer();
+    if (!voiceId && host.voiceId) voiceId = host.voiceId;
+    scriptDirective += `\n\nHOST: write lines for ${host.name} to say to their phone camera. Persona: ${host.persona} Style: ${host.styleNotes} Stay this person across the whole script.`;
+  }
+
+  let topicSeed = seed;
+  if (!topicSeed && track.id === "current-events") {
+    const picked = await claimNewsSeed();
+    if (picked) {
+      topicSeed = formatNewsSeed(picked);
+      log("news", `current-events seed: ${picked.headline}`);
+    } else {
+      log("news", "no fresh seed — run `npm run news`. Script must not invent a headline.");
+      scriptDirective +=
+        "\n\nNo verified news seed was available. Do NOT invent a headline, quote, company action, or number.";
+    }
+  }
+
   log(
     "pipeline",
     `${track.label} × ${format.label} | ~$${estimateCost(format).toFixed(2)}/video${
@@ -80,8 +104,8 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
       pb,
       track,
       params.targetLengthSec,
-      format.scriptDirective,
-      seed,
+      scriptDirective,
+      topicSeed,
       recentTopics,
     ));
   }
@@ -98,7 +122,7 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
   const generation = {
     id,
     createdAt: new Date().toISOString(),
-    seed: seed ?? null,
+    seed: topicSeed ?? null,
     exploring,
     exploredDimension: dimension,
     track: { id: track.id, label: track.label },
@@ -110,7 +134,7 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
       visualPromptStyle: format.visualPromptStyle,
     },
     model: config.model,
-    voiceId: opts.voiceId ?? config.elevenlabs.voiceId,
+    voiceId: voiceId ?? config.elevenlabs.voiceId,
     visualStyle: opts.visualStyle ?? format.visualPromptStyle,
     sfxIntensity: config.audio.sfxIntensity,
     params,
@@ -138,7 +162,7 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
     `${script.hook} ${script.narration}${followCta}`,
     audioPath,
     params.voice,
-    opts.voiceId,
+    voiceId,
   );
 
   const captions = await renderCaptions(words, dir, params.caption);
@@ -148,6 +172,7 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
     promptStyle: opts.visualStyle ?? format.visualPromptStyle,
     clipSeconds: params.visual.segmentSeconds,
     dir,
+    audioPath,
   });
 
   // Comedic mascot cameo: splice a Matteo (Italian-brainrot) slide into the
@@ -172,7 +197,10 @@ export async function make(seed?: string, opts: MakeOpts = {}): Promise<MadeVide
   await mkdir(config.outDir, { recursive: true });
   const videoPath = path.join(config.outDir, `${name}-${Date.now()}.mp4`);
   const footageFilter = FOOTAGE_FILTERS[format.footageFilter ?? "none"] ?? "";
-  await assemble(dir, broll, audioPath, captions, flair, videoPath, params.visual.segmentSeconds, footageFilter);
+  // UGC may be one full lip-sync take. A high cap keeps that take intact;
+  // short Ken Burns clips still loop because they are shorter than the cap.
+  const clipCap = format.provider === "ugc" ? 180 : params.visual.segmentSeconds;
+  await assemble(dir, broll, audioPath, captions, flair, videoPath, clipCap, footageFilter);
 
   await appendEntry({
     id,
@@ -279,6 +307,7 @@ export async function cycle(
   privacy: "private" | "unlisted" | "public" = "public",
 ): Promise<string[]> {
   // 1. learn from live performance (both tolerate no-data / no-auth gracefully)
+  await refreshNews().catch((e) => log("cycle", `news skipped: ${e.message}`));
   await syncAnalytics().catch((e) => log("cycle", `analytics skipped: ${e.message}`));
   await coach().catch((e) => log("cycle", `coach skipped: ${e.message}`));
 

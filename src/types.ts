@@ -61,6 +61,16 @@ export interface Performance {
   estRevenue: number; // USD
   rpm: number; // revenue per 1000 views
   sampledAt: string;
+  /** Hours between upload (ledger createdAt) and this sample. */
+  ageHours?: number;
+  /** views / ageHours. Usable before the reporting API fills retention. */
+  viewsPerHour?: number;
+  /** (likes + comments) / views. 0 when views are 0. */
+  engagementRate?: number;
+  /** View count from the first sync while the video was ~0.5–2.5h old. */
+  viewsAt1h?: number;
+  /** View count from the first sync while the video was ~18–36h old. */
+  viewsAt24h?: number;
 }
 
 export interface LedgerEntry {

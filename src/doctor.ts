@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
 import { FORMATS, availableFormats } from "./formats.js";
+import { getActiveInfluencer, portraitReady } from "./influencers.js";
 import { loadPlaybook } from "./playbook.js";
 import { estimateCost } from "./preflight.js";
 import { authedClient } from "./steps/upload.js";
@@ -53,8 +54,35 @@ export async function doctor(): Promise<void> {
   add(
     "fal.ai (AI visuals)",
     !!config.fal.apiKey,
-    config.fal.apiKey ? "present (not billed to verify)" : "FAL_KEY missing — AI formats disabled",
+    config.fal.apiKey
+      ? "present (not billed to verify) — unlocks AI formats + UGC portrait"
+      : "FAL_KEY missing — AI formats + generated UGC portraits disabled. https://fal.ai/dashboard/keys",
   );
+
+  // HeyGen — cheap identity probe. Lip-sync is optional; portrait UGC does not need it.
+  if (config.heygen.apiKey) {
+    try {
+      const r = await fetch("https://api.heygen.com/v3/users/me", {
+        headers: { "X-Api-Key": config.heygen.apiKey },
+        signal: AbortSignal.timeout(8000),
+      });
+      add(
+        "HeyGen (UGC lip-sync)",
+        r.ok,
+        r.ok
+          ? "valid — audio-to-video on POST /v3/videos"
+          : `key rejected (${r.status}). https://developers.heygen.com/docs/api-key`,
+      );
+    } catch (e: any) {
+      add("HeyGen (UGC lip-sync)", false, e.message);
+    }
+  } else {
+    add(
+      "HeyGen (UGC lip-sync)",
+      false,
+      "optional — set HEYGEN_API_KEY for avatar lip-sync. Signup: https://app.heygen.com/  · key: https://developers.heygen.com/docs/api-key",
+    );
+  }
 
   // YouTube — refresh the access token (proves the grant is valid; needs no
   // extra scope, unlike channels.list which would require youtube.readonly).
@@ -78,7 +106,56 @@ export async function doctor(): Promise<void> {
     const enabled = pb.enabledFormats.includes(f.id);
     const ready = runnable.includes(f.id);
     const mark = !enabled ? "⚪ off" : ready ? "🟢 ready" : "🔴 needs key";
-    console.log(`  ${mark.padEnd(14)} ${f.id.padEnd(20)} ~$${estimateCost(f).toFixed(2)}   (${f.requires.join(", ") || "free visuals"})`);
+    const needs = f.requiresAny?.length
+      ? `one of ${f.requiresAny.join(" | ")}`
+      : f.requires.join(", ") || "free visuals";
+    const extra =
+      f.id === "ugc-talking-head" && config.heygen.apiKey && !config.ugc.lipsyncOff
+        ? " + HeyGen plan"
+        : f.id === "ugc-talking-head" && config.ugc.lipsync
+          ? " fal lipsync ~$0.13/s"
+          : "";
+    console.log(`  ${mark.padEnd(14)} ${f.id.padEnd(22)} ~$${estimateCost(f).toFixed(2)}   (${needs})${extra}`);
+  }
+
+  const host = await getActiveInfluencer().catch(() => null);
+  const face = portraitReady();
+  const demoVisual = !!(config.pexels.apiKey || config.pixabay.apiKey || config.fal.apiKey);
+  const ugcPortrait = !!(config.fal.apiKey || face);
+  const ugcLipsync =
+    !config.ugc.lipsyncOff &&
+    (!!config.heygen.apiKey || (config.ugc.lipsync && !!config.fal.apiKey));
+  console.log("\nReadiness:");
+  console.log(
+    `  ${config.news.apiKey ? "✅" : "⚪"} News — RSS works with zero keys (npm run news). ${
+      config.news.apiKey ? "NEWS_API_KEY set" : "NEWS_API_KEY optional: https://newsapi.org/register"
+    }`,
+  );
+  console.log(
+    `  ${demoVisual ? "✅" : "❌"} Demo  — stock / slideshow / gameplay needs Pexels, Pixabay, or FAL, plus a script key and ElevenLabs`,
+  );
+  console.log(
+    `  ${ugcPortrait ? "✅" : "❌"} UGC portrait — ${
+      ugcPortrait
+        ? face
+          ? "saved face on disk (Ken Burns, no extra image call)"
+          : "FAL_KEY can generate a recurring portrait"
+        : "set FAL_KEY or put a faceImage path on the influencer"
+    }`,
+  );
+  console.log(
+    `  ${ugcLipsync ? "✅" : "⚪"} UGC lip-sync — ${
+      config.ugc.lipsyncOff
+        ? "off (UGC_LIPSYNC=0) — portrait only"
+        : config.heygen.apiKey
+          ? "HeyGen key set (falls back to portrait if the render fails)"
+          : "set HEYGEN_API_KEY, or UGC_LIPSYNC=1 to use fal sync-lipsync (~$0.13/sec)"
+    }`,
+  );
+  if (host) {
+    console.log(`  host: ${host.name} (${host.id})${host.heygenAvatarId ? ` avatar ${host.heygenAvatarId}` : " — no heygenAvatarId (image lip-sync or portrait)"}`);
+    console.log("  roster: assets/influencers.json, overrides in data/influencers.json");
+    console.log('  new host: npx tsx src/cli.ts influencer new "Name" [--portrait]');
   }
   console.log("");
 }

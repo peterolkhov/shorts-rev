@@ -103,6 +103,7 @@ export function defaultPlaybook(): Playbook {
       "ai-slideshow",
       "ai-brainrot",
       "gameplay-story",
+      "ugc-talking-head",
     ],
     formatWeights: {
       "finance-narration": 1,
@@ -111,6 +112,7 @@ export function defaultPlaybook(): Playbook {
       "ai-brainrot": 1,
       "gameplay-story": 1,
       "ai-cinematic": 1,
+      "ugc-talking-head": 0.8,
     },
     // Both content tracks enabled. Finance earns more per view; entertainment
     // grows the channel. The coach reweights them as the data comes in.

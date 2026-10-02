@@ -7,6 +7,7 @@ import { config, resolveModel } from "../config.js";
 import { log } from "../lib/util.js";
 import { authedClient } from "./upload.js";
 import { loadLedger } from "../ledger.js";
+import { mineAndSave } from "./themes.js";
 
 export interface PendingComment {
   commentId: string; // top-level comment id — the parent for a reply
@@ -166,6 +167,9 @@ export async function engageComments(opts: { post?: boolean; max?: number } = {}
     log("comments", "no comments found (or token needs re-auth with youtube.force-ssl — run: npm run auth).");
     return;
   }
+  await mineAndSave(comments).catch((e: any) =>
+    log("comments", `theme mining skipped: ${e.message}`),
+  );
   const replied = await loadReplied();
   const fresh = comments.filter((c) => !replied.has(c.commentId));
   log("comments", `${comments.length} comments, ${fresh.length} not yet replied to`);
@@ -193,4 +197,10 @@ export async function engageComments(opts: { post?: boolean; max?: number } = {}
   }
   await saveReplied(replied);
   log("comments", opts.post ? `posted ${done} replies` : `drafted (dry-run). Re-run with --post to publish.`);
+}
+
+/** List comments and write comment-themes.json for ideate. No replies. */
+export async function refreshCommentThemes(): Promise<void> {
+  const comments = await listComments();
+  await mineAndSave(comments);
 }

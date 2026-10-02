@@ -36,6 +36,9 @@ monetization-snapshots.json
 comment-replies.json
 repost-queue.json
 viral-hooks.json
+news-seeds.json
+comment-themes.json
+data/
 
 # macOS / editor / local notes
 .DS_Store

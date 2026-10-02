@@ -1,0 +1,27 @@
+{
+  "activeId": "avery-cole",
+  "influencers": [
+    {
+      "id": "avery-cole",
+      "name": "Avery Cole",
+      "persona": "Avery Cole is a fictional 28-year-old who films money explainers on their phone in a small apartment. Direct, a little sarcastic, one number per video. Never gives personalized investment advice and never pretends a screenshot of their own account is proof.",
+      "voiceId": "",
+      "faceImage": "",
+      "facePrompt": "original fictional adult, late 20s, short wavy brown hair, olive skin, grey t-shirt, phone-selfie framing, soft apartment window light, looking into the lens, not a celebrity, not a real person",
+      "styleNotes": "iPhone front camera, slight handheld, bedroom background, big bottom captions",
+      "heygenAvatarId": "",
+      "heygenVoiceId": ""
+    },
+    {
+      "id": "jordan-hale",
+      "name": "Jordan Hale",
+      "persona": "Jordan Hale is a fictional early-30s creator who explains jobs, layoffs, and AI at work like a friend who just read the filing. Calm, specific, no fake personal success story.",
+      "voiceId": "",
+      "faceImage": "",
+      "facePrompt": "original fictional adult, early 30s, black hair pulled back, warm medium skin, navy hoodie, phone-selfie framing, kitchen light, looking into the lens, not a celebrity, not a real person",
+      "styleNotes": "front-camera selfie, kitchen background, conversational, captions low",
+      "heygenAvatarId": "",
+      "heygenVoiceId": ""
+    }
+  ]
+}
