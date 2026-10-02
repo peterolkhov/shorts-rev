@@ -4,6 +4,7 @@ import { resolveModel } from "../config.js";
 import { STRATEGY_RULES } from "../strategy.js";
 import { log } from "../lib/util.js";
 import { loadViralHooks } from "./spy.js";
+import { loadCommentThemes } from "./themes.js";
 import type { Playbook } from "../types.js";
 import type { Track } from "../tracks.js";
 
@@ -64,6 +65,8 @@ export async function ideate(
         : "Write ONE short as a COHERENT bit that ESCALATES one clear premise (setup → escalation → button), simple and vivid enough for a 12-year-old to follow effortlessly. Genuinely funny, absurd-but-relatable, never scattered, never mean-spirited or false.";
 
   const viral = (await loadViralHooks()).slice(0, 8);
+  const themes = await loadCommentThemes();
+  const newsSeed = !!seed && seed.includes("NEWS SEED");
 
   const prompt = `You are the scriptwriter for a faceless YouTube Shorts channel with a CONSISTENT, recognizable voice.
 
@@ -84,7 +87,13 @@ General hook guidance (learned): ${pb.hookGuidance}${
 FORMAT for this specific video (match this delivery): ${scriptDirective}
 
 ⚠️ HARD LIMIT: the narration must be ${words} words or FEWER (target ~${targetLengthSec}s spoken). Count your words. A Short that runs long gets swiped away — brevity is non-negotiable. Cut every filler word; keep only the hook, the payoff, and the button.
-${seed ? `Specific angle to cover: ${seed}` : "Pick a fresh, specific angle in the directions above — don't repeat a tired take."}
+${
+  newsSeed
+    ? `GROUNDING — this is a current-events video tied to a real headline. You may assert ONLY the headline, source, and summary below. If a number, quote, or event is not written there, do not invent it. Opinions must be clearly framed as the host's opinion. Paraphrase; do not fabricate a quote.\n\n${seed}`
+    : seed
+      ? `Specific angle to cover: ${seed}`
+      : "Pick a fresh, specific angle in the directions above — don't repeat a tired take."
+}
 ${
   recentTopics.length
     ? `\n🚫 ALREADY COVERED — pick a DIFFERENT angle, do not restate any of these (not even reworded):\n${recentTopics.map((t) => `- ${t}`).join("\n")}`
@@ -103,6 +112,11 @@ ${track.seedHooks.map((h) => `- "${h}"`).join("\n")}
 ${
   viral.length
     ? `\n🔥 GOING VIRAL on finance Shorts RIGHT NOW (millions of views each). STEAL THE HOOK SHAPE — the curiosity mechanism/structure — and swap in our own specifics. Do NOT copy a topic verbatim; adapt the SKELETON:\n${viral.map((v) => `- "${v.title}" (${Math.round(v.views / 1000)}k views)`).join("\n")}\n`
+    : ""
+}
+${
+  themes?.forWriter
+    ? `\n💬 WHAT VIEWERS ACTUALLY ASKED (from recent comments). If it fits this track, answer one of these. Paraphrase — do not invent a quote or attribute words to a real viewer:\n${themes.forWriter}\n`
     : ""
 }
 ⚡ DELIVERY ENERGY (non-negotiable): write with HIGH energy and high stakes — confident, urgent, like a young creator who genuinely believes this is life-changing and can't wait to blurt it out. Bold TRUE claims, short punchy sentences, a real sense that this MATTERS right now. Never flat, never lecture-y, never hedged. If a line sounds like a textbook, rewrite it like a hyped-up friend telling you a secret.

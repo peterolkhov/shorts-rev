@@ -1,5 +1,5 @@
 import { config } from "./config.js";
-import type { Format } from "./formats.js";
+import { formatReady, type Format } from "./formats.js";
 
 /** Every env key a given format needs to run end-to-end. */
 export function requiredKeys(format: Format): string[] {
@@ -10,6 +10,9 @@ export function requiredKeys(format: Format): string[] {
   }
   if (!process.env.ELEVENLABS_API_KEY) keys.push("ELEVENLABS_API_KEY");
   for (const k of format.requires) if (!process.env[k]) keys.push(k);
+  if (format.requiresAny?.length && !formatReady(format)) {
+    keys.push(`one of ${format.requiresAny.join(" | ")} (or a face image for UGC)`);
+  }
   return keys;
 }
 
@@ -36,5 +39,14 @@ export function estimateCost(format: Format): number {
   if (format.provider === "ai-image") visuals = config.fal.maxImages * 0.01;
   if (format.provider === "ai-video")
     visuals = config.fal.maxVideos * format.clipSeconds * 0.12;
+  if (format.provider === "ugc") {
+    // HeyGen bills on its own plan — doctor says so instead of inventing a dollar figure.
+    // fal lip-sync is about $0.14/sec and only runs when UGC_LIPSYNC=1 and HeyGen is absent.
+    if (!config.heygen.apiKey && config.ugc.lipsync && config.fal.apiKey) {
+      visuals = 40 * 0.14;
+    } else if (!config.heygen.apiKey && config.fal.apiKey) {
+      visuals = 0.01; // one cached portrait
+    }
+  }
   return Math.round((script + voice + visuals) * 100) / 100;
 }

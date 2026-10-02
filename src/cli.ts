@@ -4,7 +4,9 @@ import { make, makeAndUpload, batch, post, cycle, crosspost } from "./pipeline.j
 import { authorize, deleteVideos } from "./steps/upload.js";
 import { authorizeTiktok, describePublishers } from "./publishers/index.js";
 import { syncAnalytics } from "./steps/analytics.js";
-import { engageComments } from "./steps/comments.js";
+import { engageComments, refreshCommentThemes } from "./steps/comments.js";
+import { loadNewsQueue, refreshNews } from "./steps/news.js";
+import { createInfluencer, listInfluencers, setActiveInfluencer } from "./influencers.js";
 import { recycleTakedown, repostDue } from "./steps/recycle.js";
 import { recordSnapshot } from "./steps/snapshot.js";
 import { spyTopHooks } from "./steps/spy.js";
@@ -35,12 +37,15 @@ async function stats() {
   console.log(`  tracks=${JSON.stringify(pb.trackWeights)}`);
   console.log(`  formats=${JSON.stringify(pb.formatWeights)}`);
   console.log(`  length=${pb.targetLengthSec}s explore=${pb.exploreRate}\n`);
+  const news = await loadNewsQueue();
+  const freshNews = news.seeds.filter((s) => !s.usedAt).length;
+  console.log(`news seeds: ${freshNews} fresh (${news.seeds.length} stored)`);
   console.log(`${ledger.length} videos in ledger:`);
   for (const e of ledger.slice(-15)) {
     const p = e.performance;
     const s = score(e);
     const perf = p
-      ? `${p.views}v ${p.avgViewPct.toFixed(0)}% $${p.rpm.toFixed(3)}rpm ${s ? "score=" + s.toFixed(2) : ""}`
+      ? `${p.views}v ${p.viewsPerHour != null ? p.viewsPerHour.toFixed(0) + "/h " : ""}${p.avgViewPct.toFixed(0)}% $${p.rpm.toFixed(3)}rpm ${s ? "score=" + s.toFixed(2) : ""}`
       : e.youtubeId
         ? "uploaded, no analytics yet"
         : "local only";
@@ -100,9 +105,45 @@ async function main() {
     case "delete": // remove videos by id: delete <id> <id> ...
       await deleteVideos(rest.filter((a) => !a.startsWith("-")));
       break;
-    case "sync": // pull retention/RPM from YouTube into the ledger
+    case "sync": // pull views/hour, engagement, retention, RPM into the ledger
       await syncAnalytics();
+      console.log("\nNext: npm run coach   (or npm run learn, which is sync → comment themes → coach)");
       break;
+    case "news": {
+      // zero-key RSS (+ NewsAPI if NEWS_API_KEY is set) → news-seeds.json
+      const seeds = await refreshNews();
+      const fresh = seeds.filter((s) => !s.usedAt);
+      console.log(`\n${fresh.length} fresh current-events seeds in news-seeds.json\n`);
+      for (const s of fresh.slice(0, 15)) {
+        console.log(`  • ${s.headline}`);
+        console.log(`    ${s.source}  ${s.url}`);
+      }
+      console.log("\nmake/batch with the current-events track consumes the newest seed when you don't pass one.");
+      break;
+    }
+    case "learn": {
+      // The after-upload path: refresh what we can, then let coach move the playbook.
+      // sync needs YouTube auth; news does not. A sync failure does not skip coach.
+      await refreshNews().catch((e) => log("learn", `news skipped: ${e.message}`));
+      await syncAnalytics().catch((e) => log("learn", `sync skipped: ${e.message}`));
+      await refreshCommentThemes().catch((e) => log("learn", `themes skipped: ${e.message}`));
+      await coach();
+      console.log("\nLearned. Post with npm run make / batch / loop. Plateaued view counts raise exploreRate.");
+      break;
+    }
+    case "influencer": {
+      const sub = rest.find((a) => !a.startsWith("-")) ?? "list";
+      const name = rest.filter((a) => !a.startsWith("-")).slice(1).join(" ");
+      if (sub === "list") await listInfluencers();
+      else if (sub === "new") await createInfluencer(name || undefined, { portrait: rest.includes("--portrait") });
+      else if (sub === "use") {
+        if (!name) throw new Error("usage: influencer use <id>");
+        await setActiveInfluencer(name);
+      } else {
+        console.log('usage: influencer [list | new "Name" | use <id>] [--portrait]');
+      }
+      break;
+    }
     case "comments": // read + reply to comments. dry-run drafts unless --post
       await engageComments({ post: rest.includes("--post") });
       break;
@@ -134,6 +175,8 @@ async function main() {
       const pb = await loadPlaybook();
       if (new Date(pb.updatedAt).toDateString() !== now.toDateString()) {
         await syncAnalytics().catch((e) => log("tick", `sync skipped: ${e.message}`));
+        await refreshNews().catch((e) => log("tick", `news skipped: ${e.message}`));
+        await refreshCommentThemes().catch((e) => log("tick", `themes skipped: ${e.message}`));
         await spyTopHooks().catch((e) => log("tick", `spy skipped: ${e.message}`));
         await coach().catch((e) => log("tick", `coach skipped: ${e.message}`));
         await recordSnapshot().catch((e) => log("tick", `snapshot skipped: ${e.message}`));
@@ -168,8 +211,10 @@ async function main() {
     case "coach": // let the LLM tune the playbook from performance
       await coach();
       break;
-    case "loop": // the full self-improving cycle: sync -> coach -> post
+    case "loop": // sync -> news -> comment themes -> coach -> post
       await syncAnalytics();
+      await refreshNews().catch((e) => log("loop", `news skipped: ${e.message}`));
+      await refreshCommentThemes().catch((e) => log("loop", `themes skipped: ${e.message}`));
       await coach();
       console.log(await makeAndUpload(seed));
       break;
@@ -203,12 +248,18 @@ Niche: "${config.niche}"
     npx tsx src/cli.ts tiktok-auth   one-time TikTok OAuth
     npx tsx src/cli.ts crosspost     fan rendered videos out to all platforms
 
+  After you upload (retention lags ~48h — views/hour does not)
+    npx tsx src/cli.ts sync   pull views, views/hour, engagement, retention, RPM
+    npx tsx src/cli.ts coach  tune playbook.json (raises exploreRate on a view plateau)
+    npx tsx src/cli.ts learn  sync → comment themes → coach (no new upload)
+    npx tsx src/cli.ts loop   sync → news → coach → post one
+
   Self-improvement loop
-    npx tsx src/cli.ts sync   pull retention/RPM into ledger.json
-    npx tsx src/cli.ts coach  LLM tunes playbook.json from performance
-    npx tsx src/cli.ts loop   sync -> coach -> post (the daily cron target)
+    npx tsx src/cli.ts news   refresh current-events seeds (RSS, no paid key)
+    npx tsx src/cli.ts spy    finance Short titles from other channels
     npx tsx src/cli.ts cycle  produce + cross-post one video per lane
     npx tsx src/cli.ts stats  show playbook + recent video performance
+    npx tsx src/cli.ts influencer list   phone-creator hosts for UGC
 
 Flow: run 'cycle' daily. It learns what retains + earns and tunes itself,
 then posts to every platform in PLATFORMS. See SETUP-CROSSPOST.md.`);

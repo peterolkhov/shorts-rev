@@ -1,3 +1,4 @@
+import { portraitReady } from "./influencers.js";
 import type { Provider } from "./providers.js";
 import type { CaptionStyle } from "./types.js";
 
@@ -10,7 +11,8 @@ export interface Format {
   id: string;
   label: string;
   provider: Provider;
-  requires: string[]; // env vars that must be set to use this format
+  requires: string[]; // env vars that must ALL be set to use this format
+  requiresAny?: string[]; // at least one of these (plus `requires`)
   scriptDirective: string; // shapes the ideate prompt's tone
   visualPromptStyle: string; // look for AI-generated visuals
   caption: Partial<CaptionStyle>; // overrides on top of the playbook caption
@@ -150,17 +152,40 @@ export const FORMATS: Format[] = [
     caption: { maxWords: 1, fontScale: 1.4, yFraction: 0.5, boxColor: "#00B84D", boxTextColor: "#FFFFFF", highlightColor: "#00E676", fillColor: "#FFFFFF", strokeColor: "rgba(0,0,0,0.98)" },
     clipSeconds: 2.2,
   },
+  {
+    id: "ugc-talking-head",
+    label: "UGC talking-head (phone creator)",
+    provider: "ugc",
+    requires: [],
+    // Portrait Ken Burns needs FAL (or a face file). HeyGen lip-syncs when that key is set.
+    requiresAny: ["FAL_KEY", "HEYGEN_API_KEY"],
+    scriptDirective:
+      "Write as a FICTIONAL creator talking into their phone — first person, conversational, a little imperfect, one idea. It must still be a real script (setup → turn → payoff) with a true, specific claim. Do NOT invent a personal riches story, a fake bank screenshot, or a quote from a real person. The host explains; they don't pretend the video is proof of their own income. brollQueries describe the SAME person in a bedroom or kitchen, phone-selfie framing, plus one or two cutaway objects (a bill, a laptop, a paycheck) — not a new face every line.",
+    visualPromptStyle:
+      "vertical smartphone selfie, front camera, natural skin, soft indoor light, creator looking into the lens",
+    caption: { maxWords: 2, yFraction: 0.74, fontScale: 1.12, highlightColor: "#FFE600" },
+    clipSeconds: 2.6,
+  },
 ];
 
 export function getFormat(id: string): Format {
   return FORMATS.find((f) => f.id === id) ?? FORMATS[0];
 }
 
+/** True when this format's keys (or, for UGC, a saved face) are present. */
+export function formatReady(f: Format, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!f.requires.every((k) => !!env[k])) return false;
+  if (f.requiresAny?.length) {
+    const any = f.requiresAny.some((k) => !!env[k]);
+    if (f.id === "ugc-talking-head") return any || portraitReady();
+    return any;
+  }
+  return true;
+}
+
 /** Formats that are both enabled in the playbook AND have their keys present. */
 export function availableFormats(enabled: string[]): Format[] {
-  const ok = FORMATS.filter(
-    (f) => enabled.includes(f.id) && f.requires.every((k) => !!process.env[k]),
-  );
+  const ok = FORMATS.filter((f) => enabled.includes(f.id) && formatReady(f));
   // Always keep at least stock if its key exists, so the pipeline never stalls.
   if (ok.length) return ok;
   return FORMATS.filter(

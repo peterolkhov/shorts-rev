@@ -1,5 +1,44 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { config, requireEnv } from "../config.js";
 import { log } from "./util.js";
+
+/**
+ * Upload a local file to fal's CDN and return the file URL models accept.
+ * POST https://rest.fal.ai/storage/upload/initiate then PUT the bytes.
+ */
+export async function falUpload(filePath: string, contentType: string): Promise<string> {
+  const key = requireEnv(config.fal.apiKey, "FAL_KEY");
+  const init = await fetch(
+    "https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        file_name: path.basename(filePath),
+        content_type: contentType,
+      }),
+    },
+  );
+  if (!init.ok) {
+    throw new Error(`fal upload init ${init.status}: ${(await init.text()).slice(0, 180)}`);
+  }
+  const { upload_url, file_url } = (await init.json()) as {
+    upload_url: string;
+    file_url: string;
+  };
+  const bytes = await readFile(filePath);
+  const put = await fetch(upload_url, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: bytes,
+  });
+  if (!put.ok) throw new Error(`fal upload put ${put.status}`);
+  return file_url;
+}
 
 /**
  * Minimal fal.ai queue-API client (no SDK). Submits a job, polls until done,

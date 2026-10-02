@@ -18,9 +18,13 @@
     "loop": "tsx src/cli.ts loop",
     "sync": "tsx src/cli.ts sync",
     "coach": "tsx src/cli.ts coach",
+    "learn": "tsx src/cli.ts learn",
+    "news": "tsx src/cli.ts news",
     "spy": "tsx src/cli.ts spy",
     "stats": "tsx src/cli.ts stats",
-    "doctor": "tsx src/cli.ts doctor"
+    "influencer": "tsx src/cli.ts influencer",
+    "doctor": "tsx src/cli.ts doctor",
+    "test": "tsx --test src/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.85",

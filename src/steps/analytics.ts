@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { authedClient } from "./upload.js";
 import { loadLedger, updateEntry } from "../ledger.js";
+import { attachEarlySignals } from "../feedback.js";
 import { log } from "../lib/util.js";
 import type { Performance } from "../types.js";
 
@@ -60,12 +61,13 @@ export async function syncAnalytics(): Promise<void> {
       perf.rpm = perf.views > 0 ? (perf.estRevenue / perf.views) * 1000 : 0;
     }
 
-    await updateEntry(entry.id, { performance: perf });
+    const early = attachEarlySignals(entry, perf);
+    await updateEntry(entry.id, { performance: early });
     log(
       "analytics",
-      `${entry.youtubeId}: ${perf.views} views, ${perf.avgViewPct.toFixed(
-        0,
-      )}% retention, $${perf.rpm.toFixed(3)} RPM`,
+      `${entry.youtubeId}: ${early.views} views, ${early.viewsPerHour ?? 0}/h, eng ${(
+        (early.engagementRate ?? 0) * 100
+      ).toFixed(1)}%, ${early.avgViewPct.toFixed(0)}% retention, $${early.rpm.toFixed(3)} RPM`,
     );
   }
 }

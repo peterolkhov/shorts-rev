@@ -5,6 +5,7 @@ import { log } from "./lib/util.js";
 import { falRun } from "./lib/fal.js";
 import { imageToClip } from "./lib/motion.js";
 import { fetchBroll } from "./steps/broll.js";
+import { ugcClips } from "./steps/ugc.js";
 
 export type Provider =
   | "stock" // Pexels
@@ -12,7 +13,8 @@ export type Provider =
   | "ai-image" // fal image + ken-burns motion
   | "ai-video" // fal text-to-video
   | "real-image" // REAL photos (Wikimedia Commons) + ken-burns, stock fallback
-  | "local-gameplay"; // your own ./gameplay files
+  | "local-gameplay" // your own ./gameplay files
+  | "ugc"; // phone-style talking head (HeyGen / fal lipsync / portrait fallback)
 
 export interface VisualRequest {
   queries: string[]; // visual beats from the script
@@ -20,6 +22,8 @@ export interface VisualRequest {
   promptStyle: string; // format-specific look (e.g. "cinematic", "chaotic meme")
   clipSeconds: number;
   dir: string;
+  /** ElevenLabs track — UGC lip-sync uses this so captions stay aligned. */
+  audioPath?: string;
 }
 
 /** Resolve the visual clips for a video according to the chosen provider. */
@@ -40,6 +44,8 @@ export async function fetchVisualsByProvider(
       return realImageClips(req);
     case "local-gameplay":
       return localGameplay(req.queries.length);
+    case "ugc":
+      return ugcClips(req);
   }
 }
 

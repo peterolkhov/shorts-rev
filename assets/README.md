@@ -9,3 +9,9 @@ This directory is for optional media the pipeline may reference:
 
 No assets are required. The pipeline works out of the box with stock footage and
 AI-generated visuals.
+
+`influencers.json` is the default roster of **fictional** phone-creator hosts
+for the `ugc-talking-head` format (name, persona, voice id, face prompt,
+optional HeyGen avatar id). Runtime edits and generated portraits go in
+`data/influencers.json` and `data/influencers/`, which are gitignored. Do not
+commit a real person's face or a celebrity likeness.

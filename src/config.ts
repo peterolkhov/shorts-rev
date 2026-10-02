@@ -58,11 +58,34 @@ export const config = {
     apiKey: process.env.FAL_KEY ?? "",
     imageModel: process.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell", // fast + cheap
     videoModel: process.env.FAL_VIDEO_MODEL ?? "fal-ai/wan/v2.2-a14b/text-to-video", // cheap motion
+    // Image + our ElevenLabs track → talking head. Opt-in: ~$0.13/sec.
+    // https://fal.ai/models/fal-ai/sync-lipsync/v3/image-to-video
+    lipsyncModel:
+      process.env.FAL_LIPSYNC_MODEL ?? "fal-ai/sync-lipsync/v3/image-to-video",
     // HARD CAPS on paid AI generations per video. The LLM may return up to 8
     // visual beats; we never generate more than this many (clips loop to fill).
     // Keep videos low — they're the expensive one.
     maxImages: Number(process.env.FAL_MAX_IMAGES ?? 5),
     maxVideos: Number(process.env.FAL_MAX_VIDEOS ?? 3),
+  },
+
+  // HeyGen avatar / image lip-sync (v3). Optional. Portrait UGC still runs on FAL_KEY.
+  // Signup: https://app.heygen.com/  · key: https://developers.heygen.com/docs/api-key
+  heygen: {
+    apiKey: process.env.HEYGEN_API_KEY ?? "",
+  },
+
+  // UGC_LIPSYNC=1 forces the paid fal lipsync model. UGC_LIPSYNC=0 skips HeyGen too
+  // and stays on the cheap portrait (Ken Burns) path.
+  ugc: {
+    lipsync: process.env.UGC_LIPSYNC === "1",
+    lipsyncOff: process.env.UGC_LIPSYNC === "0",
+  },
+
+  // Optional NewsAPI.org enrichment. RSS works with no key.
+  news: {
+    apiKey: process.env.NEWS_API_KEY ?? "",
+    maxAgeHours: Number(process.env.NEWS_MAX_AGE_HOURS ?? 72),
   },
 
   youtube: {

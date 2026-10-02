@@ -1,10 +1,13 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { config, resolveModel } from "./config.js";
+import { resolveModel } from "./config.js";
 import { loadLedger, score } from "./ledger.js";
+import { applyLearningGuards, detectPlateau } from "./feedback.js";
 import { loadPlaybook, savePlaybook } from "./playbook.js";
 import { STRATEGY_RULES } from "./strategy.js";
+import { loadCommentThemes } from "./steps/themes.js";
 import { log } from "./lib/util.js";
+import type { Playbook } from "./types.js";
 
 const PlaybookSchema = z.object({
   hookGuidance: z.string(),
@@ -82,6 +85,10 @@ export async function coach(): Promise<void> {
       views: p.views,
       likes: p.likes,
       comments: p.comments,
+      viewsPerHour: p.viewsPerHour ?? null,
+      engagementRate: p.engagementRate ?? null,
+      viewsAt1h: p.viewsAt1h ?? null,
+      viewsAt24h: p.viewsAt24h ?? null,
       engagementPer1k: Number((((p.likes + p.comments * 4) / Math.max(p.views, 1)) * 1000).toFixed(1)),
       retentionPct: Math.round(p.avgViewPct), // 0 until reporting API catches up (~48h)
       watchSec: Math.round(p.avgViewSec), // absolute seconds held per view — retention × length, the watch-time signal
@@ -97,12 +104,14 @@ export async function coach(): Promise<void> {
   const winners = graded.slice(0, Math.min(5, graded.length)).map(summarize);
   const losers = graded.slice(-Math.min(5, graded.length)).map(summarize);
 
-  log("coach", `analyzing ${graded.length} graded videos`);
+  const plateau = detectPlateau(ledger);
+  const themes = await loadCommentThemes();
+  log(
+    "coach",
+    `analyzing ${graded.length} graded videos — plateau=${plateau.plateaued} (${plateau.reason})`,
+  );
 
-  const { object } = await generateObject({
-    model: resolveModel(),
-    schema: PlaybookSchema,
-    prompt: `You are the optimization coach for a faceless YouTube Shorts channel that runs TWO content tracks:
+  const prompt = `You are the optimization coach for a faceless YouTube Shorts channel that runs TWO content tracks:
 finance (high RPM, earns per view) and entertainment (low RPM, high reach — grows subscribers).
 Your job: move the playbook toward what RETAINS viewers and grows the channel, using the evidence below.
 
@@ -113,8 +122,19 @@ Current playbook:
 ${JSON.stringify(pb, null, 2)}
 
 IMPORTANT — retentionPct and rpm are 0 for recent videos because YouTube's
-reporting API lags ~48h. For those, judge by engagementPer1k (likes+comments per
-1000 views) and views — that's the real, current signal of what landed. Lean on it.
+reporting API lags ~48h. For those, judge by viewsPerHour, viewsAt1h / viewsAt24h,
+engagementRate, and engagementPer1k. Those are real even when retention and RPM
+are 0. A video that reached ~1k views in an hour is not the same as one that
+crawled there over two days.
+
+MEASURED PLATEAU (computed in code — this is authoritative):
+${JSON.stringify(plateau)}
+If plateaued is true you MUST set exploreRate to at least 0.6 and spread formatWeights
+and trackWeights toward formats/tracks that are NOT the dominant ones. Code will
+overwrite a timid exploreRate and rebalance weights after you return.
+
+VIEWER QUESTIONS mined from comments (answer these in hookGuidance / notes when relevant; do not invent quotes):
+${themes?.forWriter || "(none yet — run comments or learn)"}
 
 TOP performers (highest blended score — engagement-led while retention data lags):
 ${JSON.stringify(winners, null, 2)}
@@ -139,9 +159,29 @@ Rules for your update (apply AFTER the plateau check above):
 - hookGuidance: concrete, learned, general instruction for hooks based on what hooked viewers.
 - notes: one paragraph explaining what you changed and why.
 
-Return the full updated playbook.`,
-  });
+Return the full updated playbook.`;
 
-  await savePlaybook({ ...object, updatedAt: new Date().toISOString() });
-  log("coach", `playbook updated. ${object.notes}`);
+  let draft: Playbook;
+  try {
+    const { object } = await generateObject({
+      model: resolveModel(),
+      schema: PlaybookSchema,
+      prompt,
+    });
+    draft = { ...object, updatedAt: new Date().toISOString() };
+  } catch (e: any) {
+    if (!plateau.plateaued) throw e;
+    log("coach", `model failed (${e.message}) — enforcing the plateau guard on the current playbook`);
+    draft = { ...pb, updatedAt: new Date().toISOString() };
+  }
+
+  const guarded = applyLearningGuards(draft, ledger);
+  await savePlaybook(guarded.playbook);
+  if (guarded.report.plateaued) {
+    log(
+      "coach",
+      `plateau enforced: exploreRate=${guarded.playbook.exploreRate} median=${Math.round(guarded.report.medianViews)} max/median=${guarded.report.outlierRatio.toFixed(2)}`,
+    );
+  }
+  log("coach", `playbook updated. ${guarded.playbook.notes}`);
 }

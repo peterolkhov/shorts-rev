@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
+import { velocityTerm } from "./feedback.js";
 import type { LedgerEntry } from "./types.js";
 
 const LEDGER_PATH = path.join(config.root, "ledger.json");
@@ -54,6 +55,11 @@ export function score(e: LedgerEntry): number | null {
   const engPer1k = ((p.likes + p.comments * 4) / Math.max(p.views, 1)) * 1000;
   const engagement = Math.min(engPer1k / 25, 1); // ~25 eng/1k ≈ a strong short
 
+  // views/hour (and a saved ~1h snapshot) move the score while retention and
+  // RPM are still 0. Two videos both sitting at ~1k views do not tie if one
+  // got there in an hour and the other crawled.
+  const velocity = velocityTerm(e);
+
   const retention = p.avgViewPct / 100; // 0..1  (0 until reporting catches up)
   // Absolute watch-time held per view. This is the signal the algorithm cares
   // about most, and it REWARDS LENGTH: 87% on a 42s video (holds ~42s) beats 87%
@@ -63,10 +69,10 @@ export function score(e: LedgerEntry): number | null {
   const reach = Math.min(p.views / 2000, 1); // raw reach still matters — growth, not just quality
   const hasRetention = p.avgViewPct > 0;
 
-  // BALANCED — no single factor runs the ship. Watch-time (which rewards long +
-  // retained) is one useful lens, weighed evenly with engagement and reach. RPM
-  // excluded until monetized (always 0, would just skew things).
+  // BALANCED — no single factor runs the ship. RPM stays out until monetized
+  // (always 0, would just skew things). Velocity is in both branches so a 0
+  // retention / 0 RPM row is still ranked.
   return hasRetention
-    ? hold * 0.4 + engagement * 0.4 + reach * 0.2
-    : engagement * 0.75 + reach * 0.25;
+    ? hold * 0.35 + engagement * 0.3 + velocity * 0.2 + reach * 0.15
+    : engagement * 0.5 + velocity * 0.3 + reach * 0.2;
 }
